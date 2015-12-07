@@ -1,3 +1,4 @@
+import scala.collection.mutable
 import scala.io.Source
 
 class Node {
@@ -25,9 +26,9 @@ class Dawg {
   // Nodes that are not yet checked
   var uncheckedNodes: Array[(Node, Char, Node)] = Array()
 
-  // Unique nodes that have been checked for duplication
-  // var minimizedNodes: collection.mutable.Map[Node, Node] = collection.mutable.Map()
-  var minimizedNodes = new MyHashMap()
+  // Unique nodes that have been checked for duplication.
+  // The string represents the path to the Node.
+  var minimizedNodes = new mutable.HashMap[String, Node]()
 
   /**
     * Number of nodes in the DAWG
@@ -72,18 +73,12 @@ class Dawg {
     for (i <- uncheckedNodes.length - 1 until commonPrefixSize - 1 by -1 ) {
       var (parent, letter, child) = uncheckedNodes(i)
 
-      // Equivalent with minimizedNodes.contains(child)
-      if (minimizedNodes.keys.map{_.edges.toString}.exists{_ == child.edges.toString()} ) {
-        // replace child with previously encountered one
-        // parent.edges += (letter -> minimizedNodes.get(child).get)
-        val mini = minimizedNodes.find {case (n1, n2) =>
-          n2.edges.toString() == child.edges.toString()
-        }.get._2
-
-        uncheckedNodes(i)._1.edges += (letter -> mini) // minimizedNodes.get(child).get)
+      val key = child.edges.toString()
+      if (minimizedNodes.contains(key)) {
+        uncheckedNodes(i)._1.edges += (letter -> minimizedNodes.get(key).get)
       } else {
         // add the state to the minimized nodes
-        minimizedNodes += (child -> child)
+        minimizedNodes += (key -> child)
       }
       uncheckedNodes = uncheckedNodes.slice(0, i) // .pop (remove last element); this is very weird to be changed here
     }
@@ -195,14 +190,20 @@ object DawgTest {
 
   def main(args: Array[String]): Unit = {
     val dawg = new Dawg()
-    dawg.load("data/words.sorted")
-    // dawg.load("data/input.txt")
+    // dawg.load("data/words.sorted")
+
+    val start = System.currentTimeMillis()
+    // daws.load("data/input.txt")
+    dawg.load("data/words.100000")
+    val end = System.currentTimeMillis()
 
 //    if (dawg.lookup("caj"))
 //      println("it is there")
 //    else
 //      println("it is NOT there")
 //
+    println(s"Loaded in ${end - start}ms")
+
 //    println(dawg.toDot)
     println("Number of nodes: " + dawg.nodeCount + " (root not counted)")
   }
