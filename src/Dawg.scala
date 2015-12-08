@@ -142,6 +142,30 @@ class Dawg {
   }
 
   /**
+    * Create a Map ( "NodeId-NodeId" -> Char ).
+    */
+  def letterIds(): Map[String, Char] = {
+    var lettersIds = Map[String, Char]()
+    val queue: collection.mutable.Queue[Node] = collection.mutable.Queue()
+    var vis: mutable.Map[Int, Boolean] = mutable.Map[Int, Boolean]()
+    vis += (root.id -> true)
+    queue.enqueue(root)
+    while (queue.nonEmpty) {
+      val node = queue.dequeue()
+      node.edges.foreach { child =>
+        lettersIds += (s"${node.id}-${child._2.id}" -> child._1)
+        if (!vis.contains(child._2.id)) {
+
+
+          queue.enqueue(child._2)
+          vis += (child._2.id -> true)
+        }
+      }
+    }
+    lettersIds
+  }
+
+  /**
     * Make a DOT representation of the DAWG.
     * @return a string representation of the DAWG.
     */
@@ -161,9 +185,9 @@ class Dawg {
         edgesStr += s"""${node.id} -> ${childNode.id} [label="$letter"]\n"""
 
         if (!childNode.visited) {
-            queue.enqueue(childNode)
-            childNode.visited = true
-          }
+          queue.enqueue(childNode)
+          childNode.visited = true
+        }
       }
 
     }
@@ -174,6 +198,44 @@ class Dawg {
     * Binary representation of the digraph.
     */
   def toBinary(filePath: String) = {
+    val edges = letterIds()
+    var output = Array.fill(edges.size) { (-1, -1, -1) }
+
+    // NodeId -> (Child1, Child2, Child3)
+    def fillChilds() = {
+      var childs: Array[Map[Int, List[Int]]] = Array.fill(minimizedNodes.size + 1){ Map() }
+      var vis: mutable.Map[Int, Boolean] = mutable.Map[Int, Boolean]() // nodes that have been visited; a sorted array could be enough
+      var q: mutable.Queue[Node] = mutable.Queue()
+      q.enqueue(root)
+      vis += (root.id -> true)
+      var i = 0
+      while (q.nonEmpty) {
+        val node = q.dequeue()
+        childs.update(i, Map(node.id -> node.edges.map (_._2.id).toList ))
+        i += 1
+        node.edges.foreach { child =>
+          if (!vis.contains(child._2.id)) {
+            q.enqueue(child._2)
+            vis += (child._2.id -> true)
+          }
+        }
+      }
+      childs
+    }
+
+    val neighbors: Array[Map[Int, List[Int]]] = fillChilds()
+    neighbors.zipWithIndex.foreach { case (el: Map[Int, List[Int]], i: Int) =>
+      val (parentId, value: List[Int]) = el.head
+      value.foreach { childId =>
+        val pos = neighbors.indexWhere { case m: Map[Int, List[Int]] => m.contains(childId) }
+
+        val edge = s"$parentId-$childId"
+        output.update(i, (pos, 0, edges.get(edge).get)) // There is an implicit conversion from char to int here
+      }
+    }
+
+    output
+    println("done")
 
   }
 
@@ -194,7 +256,7 @@ object DawgTest {
 
     val start = System.currentTimeMillis()
     // daws.load("data/input.txt")
-    dawg.load("data/words.100000")
+    dawg.load("data/input.txt")
     val end = System.currentTimeMillis()
 
 //    if (dawg.lookup("caj"))
@@ -206,6 +268,8 @@ object DawgTest {
 
 //    println(dawg.toDot)
     println("Number of nodes: " + dawg.nodeCount + " (root not counted)")
+
+    dawg.toBinary("bla")
   }
 
 }
