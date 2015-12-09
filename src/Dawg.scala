@@ -31,13 +31,18 @@ class Dawg {
   // The string represents the path to the Node.
   var minimizedNodes = new mutable.HashMap[String, Node]()
 
-  /**
-    * Number of nodes in the DAWG
-    * @return
-    */
-  def nodeCount = minimizedNodes.size
+  val END_OF_BRANCH = 1
+  val END_OF_WORD = 2
 
-  def edgeCount = edges().size // TODO Freaking refactor
+  /**
+    * @return Number of nodes in the DAWG
+    */
+  lazy val nodeCount = minimizedNodes.size
+
+  /**
+    * @return Number of edges in the DAWG
+    */
+  lazy val edgeCount = edges().size
 
   /**
     * Insert the word into the DAWG.
@@ -144,11 +149,18 @@ class Dawg {
     finish()
   }
 
-
-  case class Edge(extPos: Int, startNode: Int, endNode: Int, letter: Char)
+  /**
+    * Helper Class
+    * @param extPos external Position (see the toArray function)
+    * @param startNode start node id
+    * @param endNode end node id
+    * @param letter which letter we have from start node to end node
+    * @param extraFlag weather if end of children, end of word or both
+    */
+  case class Edge(extPos: Int, startNode: Int, endNode: Int, letter: Char, extraFlag: Int)
 
   /**
-    *
+    * Return the
     */
   def edges(): List[Edge] = {
     var edgeList: List[Edge] = List()
@@ -159,8 +171,13 @@ class Dawg {
     var pos = 0
     while (queue.nonEmpty) {
       val node = queue.dequeue()
-      node.edges.foreach { child =>
-        edgeList = edgeList :+ Edge(pos, node.id, child._2.id, child._1)
+      node.edges.zipWithIndex.foreach { case (child, id) =>
+
+        var extraFlag = 0
+        if (id == node.edges.size - 1) extraFlag = extraFlag | END_OF_BRANCH
+        if (child._2.isFinal) extraFlag = extraFlag | END_OF_WORD
+
+        edgeList = edgeList :+ Edge(pos, node.id, child._2.id, child._1, extraFlag)
         pos += 1
 
         if (!vis.contains(child._2.id)) {
@@ -202,23 +219,78 @@ class Dawg {
   }
 
   /**
-    * Binary representation of the digraph.
+    * Array representation of the digraph as an Array of tuples (Int, Int, Char), where:
+    *
+    *  ._1 - external position
+    *  ._2 - start node id
+    *  ._3 - end node id
+    *
+    * E.g.
+    *
+    *    0  1  2   3   4   --> external position
+    *    \  |  /   |   |
+    *       0      1   2   --> start node id (parent)
+    *    /  |  \   |   |
+    *    1  3  6   2   0   --> end node id (child)
+    *
+    * 0 on the last row means end of word.
+    * @return a List of Edges.
     */
-  def toBinary(filePath: String) = {
+  def toArray: Array[(Int, Int, Char)] = {
     val edgeList = edges()
 
-    val arr: Array[(Int, Char)] = Array.fill(edgeList.size) { (0, 0) }
+    val arr: Array[(Int, Int, Char)] = Array.fill(edgeList.size) { (0, 0, 0) }
 
     def find(n: Int, edgeMap: List[Edge]): Int =
-      edgeMap.find(edge => edge.startNode == n).map{_.extPos}.getOrElse(-1) // potentially ineficient
-
+      edgeMap.find(edge => edge.startNode == n).map{_.extPos}.getOrElse(0) // potentially inefficient
     edgeList.foreach { case edge =>
-      arr.update(edge.extPos, (find(edge.endNode, edgeList), edge.letter))
+      arr.update(edge.extPos, (find(edge.endNode, edgeList), edge.extraFlag, edge.letter))
     }
 
     arr
-    println("hi")
+  }
 
+  /**
+    * Compressed representation of the toArray representation (using Ints).
+    * Each edge is describe by a 4 byte word (Int). Reference: http://www.wutka.com/dawg.html
+    *
+    * 4 - bytes - reference to the next word
+    * 2 - bytes - extra Flag
+    * 1 - byte - the letter
+    *
+    * @param arr the array representation of the DAWG (obtained using the toArray function)
+    */
+  def toInts(arr: Array[(Int, Int, Char)]): Array[Int] = {
+    arr.map { case (ptr: Int, extraFlag: Int, letter: Char) =>  // TODO strange that I have to use case here
+      toInt(ptr, extraFlag, letter)
+    }
+  }
+
+  /**
+    * Encode tuple (ptr, extraFlag, letter) to Int.
+    * @param ptr pointer to next node
+    * @param extraFlag extraFlag
+    * @param letter letter
+    * @return the encoded Int
+    */
+  def toInt(ptr: Int, extraFlag: Int, letter: Char) = {
+    var a = 0x00000000
+    a = a | (ptr << 16)      // 0x00320000
+    a = a | (extraFlag << 8) // 0x00000100
+    a = a | letter           // 0x00000063
+    a
+  }
+
+  /**
+    * Decode Int to tuple (ptr, extraFlag, letter).
+    * @param value the int
+    * @return the tuple
+    */
+  def fromInt(value: Int): (Int, Int, Char) = {
+    val ptr =       (0xFFFF0000 & value) >> 16
+    val extraFlag = (0x00000F00 & value) >> 8
+    val letter =     0x000000FF & value
+    (ptr, extraFlag, letter.toChar)
   }
 }
 
@@ -252,7 +324,12 @@ object DawgTest {
     println("Number of nodes: " + dawg.nodeCount + " (root not counted)")
     println("Number of edges: " + dawg.edgeCount)
 
-    dawg.toBinary("bla")
+    val array = dawg.toArray
+    val compressedInts = dawg.toInts(array)
+
+    println(compressedInts)
+
+    println("test")
   }
 
 }
