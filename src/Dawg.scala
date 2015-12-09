@@ -1,5 +1,6 @@
 import scala.collection.mutable
 import scala.io.Source
+import scala.reflect.io.File
 
 class Node {
   val id = Id.gen
@@ -36,12 +37,14 @@ class Dawg {
     */
   def nodeCount = minimizedNodes.size
 
+  def edgeCount = edges().size // TODO Freaking refactor
+
   /**
     * Insert the word into the DAWG.
     * @param word the word to be inserted.
     */
   def insert(word: String) = {
-    if (word < previousWord) throw new RuntimeException("Words are not in lexical order")
+    if (word < previousWord) throw new RuntimeException(s"Words are not in lexical order: $word $previousWord")
 
     val commonPrefixSize = commonPrefix(word, previousWord)
 
@@ -141,28 +144,32 @@ class Dawg {
     finish()
   }
 
+
+  case class Edge(extPos: Int, startNode: Int, endNode: Int, letter: Char)
+
   /**
-    * Create a Map ( "NodeId-NodeId" -> Char ).
+    *
     */
-  def letterIds(): Map[String, Char] = {
-    var lettersIds = Map[String, Char]()
+  def edges(): List[Edge] = {
+    var edgeList: List[Edge] = List()
     val queue: collection.mutable.Queue[Node] = collection.mutable.Queue()
     var vis: mutable.Map[Int, Boolean] = mutable.Map[Int, Boolean]()
     vis += (root.id -> true)
     queue.enqueue(root)
+    var pos = 0
     while (queue.nonEmpty) {
       val node = queue.dequeue()
       node.edges.foreach { child =>
-        lettersIds += (s"${node.id}-${child._2.id}" -> child._1)
+        edgeList = edgeList :+ Edge(pos, node.id, child._2.id, child._1)
+        pos += 1
+
         if (!vis.contains(child._2.id)) {
-
-
           queue.enqueue(child._2)
           vis += (child._2.id -> true)
         }
       }
     }
-    lettersIds
+    edgeList
   }
 
   /**
@@ -178,7 +185,7 @@ class Dawg {
     root.visited = true
     while (queue.nonEmpty) {
       val node = queue.dequeue()
-      nodesStr += s"""${node.id} [label="${node.id}" ${if (node.isFinal) "shape=\"doublecircle\""} ]\n"""
+      nodesStr += s"""${node.id} [label="${node.id}" ${if (node.isFinal) "shape=\"doublecircle\"" else ""} ]\n"""
       node.edges.foreach { case (letter, childNode) =>
 
         // Store connection for later; they will appear after all the nodes are defined
@@ -198,47 +205,21 @@ class Dawg {
     * Binary representation of the digraph.
     */
   def toBinary(filePath: String) = {
-    val edges = letterIds()
-    var output = Array.fill(edges.size) { (-1, -1, -1) }
+    val edgeList = edges()
 
-    // NodeId -> (Child1, Child2, Child3)
-    def fillChilds() = {
-      var childs: Array[Map[Int, List[Int]]] = Array.fill(minimizedNodes.size + 1){ Map() }
-      var vis: mutable.Map[Int, Boolean] = mutable.Map[Int, Boolean]() // nodes that have been visited; a sorted array could be enough
-      var q: mutable.Queue[Node] = mutable.Queue()
-      q.enqueue(root)
-      vis += (root.id -> true)
-      var i = 0
-      while (q.nonEmpty) {
-        val node = q.dequeue()
-        childs.update(i, Map(node.id -> node.edges.map (_._2.id).toList ))
-        i += 1
-        node.edges.foreach { child =>
-          if (!vis.contains(child._2.id)) {
-            q.enqueue(child._2)
-            vis += (child._2.id -> true)
-          }
-        }
-      }
-      childs
+    val arr: Array[(Int, Char)] = Array.fill(edgeList.size) { (0, 0) }
+
+    def find(n: Int, edgeMap: List[Edge]): Int =
+      edgeMap.find(edge => edge.startNode == n).map{_.extPos}.getOrElse(-1) // potentially ineficient
+
+    edgeList.foreach { case edge =>
+      arr.update(edge.extPos, (find(edge.endNode, edgeList), edge.letter))
     }
 
-    val neighbors: Array[Map[Int, List[Int]]] = fillChilds()
-    neighbors.zipWithIndex.foreach { case (el: Map[Int, List[Int]], i: Int) =>
-      val (parentId, value: List[Int]) = el.head
-      value.foreach { childId =>
-        val pos = neighbors.indexWhere { case m: Map[Int, List[Int]] => m.contains(childId) }
-
-        val edge = s"$parentId-$childId"
-        output.update(i, (pos, 0, edges.get(edge).get)) // There is an implicit conversion from char to int here
-      }
-    }
-
-    output
-    println("done")
+    arr
+    println("hi")
 
   }
-
 }
 
 // Should be in Swift
@@ -255,8 +236,8 @@ object DawgTest {
     // dawg.load("data/words.sorted")
 
     val start = System.currentTimeMillis()
-    // daws.load("data/input.txt")
     dawg.load("data/input.txt")
+    // dawg.load("data/input2.txt")
     val end = System.currentTimeMillis()
 
 //    if (dawg.lookup("caj"))
@@ -266,8 +247,10 @@ object DawgTest {
 //
     println(s"Loaded in ${end - start}ms")
 
-//    println(dawg.toDot)
+    File("data/dawg.dot").writeAll(dawg.toDot)
+
     println("Number of nodes: " + dawg.nodeCount + " (root not counted)")
+    println("Number of edges: " + dawg.edgeCount)
 
     dawg.toBinary("bla")
   }
