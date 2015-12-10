@@ -1,3 +1,7 @@
+import java.io.FileOutputStream
+import java.nio.{Buffer, ByteBuffer}
+import java.nio.file.{Files, Path, Paths}
+
 import scala.collection.mutable
 import scala.io.Source
 import scala.reflect.io.File
@@ -292,6 +296,26 @@ class Dawg {
     val letter =     0x000000FF & value
     (ptr, extraFlag, letter.toChar)
   }
+
+  /**
+    * Write the array to binary file.
+    * @param filePath where to write the data
+    */
+  def writeToBinaryFile(arr: Array[Int], filePath: String): Unit = {
+    try {
+      val path = Paths.get(filePath)
+      println(s"Writing binary data to file $filePath. Array length ${arr.length}")
+
+      val b = ByteBuffer.allocate(4 * arr.length)
+      arr.foreach {x => b.putInt(x) }
+
+      Files.write(path, b.array())
+      println(s"Wrote ${4 * arr.length} bytes")
+    } catch {
+      case x: Exception => println("Wow exception ")
+        x.printStackTrace()
+    }
+  }
 }
 
 // Should be in Swift
@@ -308,8 +332,8 @@ object DawgTest {
     // dawg.load("data/words.sorted")
 
     val start = System.currentTimeMillis()
-    dawg.load("data/input.txt")
-    // dawg.load("data/input2.txt")
+    // dawg.load("data/input.txt")
+    dawg.load("data/words.100")
     val end = System.currentTimeMillis()
 
 //    if (dawg.lookup("caj"))
@@ -327,9 +351,9 @@ object DawgTest {
     val array = dawg.toArray
     val compressedInts = dawg.toInts(array)
 
-    println(compressedInts)
+    //println(compressedInts)
+    dawg.writeToBinaryFile(compressedInts, "data/words.dwg")
 
-    println("test")
   }
 
 }
