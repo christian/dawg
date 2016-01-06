@@ -285,17 +285,6 @@ class Dawg {
     a
   }
 
-  /**
-    * Decode Int to tuple (ptr, extraFlag, letter).
-    * @param value the int
-    * @return the tuple
-    */
-  def fromInt(value: Int): (Int, Int, Char) = {
-    val ptr =       (0xFFFF0000 & value) >> 16
-    val extraFlag = (0x00000F00 & value) >> 8
-    val letter =     0x000000FF & value
-    (ptr, extraFlag, letter.toChar)
-  }
 
   /**
     * Write the array to binary file.
@@ -319,28 +308,71 @@ class Dawg {
 }
 
 // Should be in Swift
-object BinaryDawg {
-  def init(filePath: String) = {}
-  def lookup(): String = { "explanation" }
+case class BinaryDawg(filePath: String) {
+
+  val path: Path = Paths.get(filePath)
+  var data: Array[Byte] = Files.readAllBytes(path)
+
+  def lookup(word: String): Boolean = { search(word, 0, 0) }
+
+  private def search(word: String, posCurrentLetter: Int, seek: Int): Boolean = {
+    if (posCurrentLetter >= word.length) { // all letters have been tested
+      true // word was found
+    } else {
+      // create an Int from first 4 bytes
+      val arrOfBytes = data.slice(seek * 4, seek * 4 + 4)
+      val theInt = ByteBuffer.wrap(arrOfBytes).getInt // Big Endian
+      val (ptr, extraFlag, letter) = fromInt(theInt)
+
+      if (letter == word(posCurrentLetter)) {
+        search(word, posCurrentLetter + 1, ptr) // move on to next letter
+      } else {
+        var shouldStop = extraFlag != 0
+        var i = 1
+        while (!shouldStop) { // e.g has end-of-word been reached?
+
+          val arrOfBytes = data.slice(seek * 4 + i * 4, seek * 4 + i * 4 + 4)
+          val theInt = ByteBuffer.wrap(arrOfBytes).getInt
+          val (ptr, extraFlag, letter) = fromInt(theInt)
+
+          if (letter == word(posCurrentLetter)) {
+            return search(word, posCurrentLetter + 1, ptr)
+          } else {
+            i += 1
+            shouldStop = extraFlag != 0
+          }
+        }
+        false
+      }
+    }
+
+  }
+
   def suggest() = {}
+
+  /**
+    * Decode Int to tuple (ptr, extraFlag, letter).
+    * @param value the int
+    * @return the tuple
+    */
+  def fromInt(value: Int): (Int, Int, Char) = {
+    val ptr =       (0xFFFF0000 & value) >> 16
+    val extraFlag = (0x00000F00 & value) >> 8
+    val letter =     0x000000FF & value
+    (ptr, extraFlag, letter.toChar)
+  }
 }
 
 object DawgTest {
 
-  def main(args: Array[String]): Unit = {
+  def createDawg() = {
     val dawg = new Dawg()
-    // dawg.load("data/words.sorted")
 
     val start = System.currentTimeMillis()
-    // dawg.load("data/input.txt")
-    dawg.load("data/words.100")
-    val end = System.currentTimeMillis()
+    dawg.load("data/input.txt")
+    // dawg.load("data/words.100")
 
-//    if (dawg.lookup("caj"))
-//      println("it is there")
-//    else
-//      println("it is NOT there")
-//
+    val end = System.currentTimeMillis()
     println(s"Loaded in ${end - start}ms")
 
     File("data/dawg.dot").writeAll(dawg.toDot)
@@ -349,10 +381,24 @@ object DawgTest {
     println("Number of edges: " + dawg.edgeCount)
 
     val array = dawg.toArray
+    array.foreach(println(_))
+
     val compressedInts = dawg.toInts(array)
 
-    //println(compressedInts)
     dawg.writeToBinaryFile(compressedInts, "data/words.dwg")
+  }
+
+  def main(args: Array[String]): Unit = {
+
+    createDawg()
+
+    println("Loading the dawg")
+    val binDawg = BinaryDawg("data/words.dwg")
+
+    println("Searching")
+    List("cats", "cale", "frig", "draw").foreach { word =>
+      println(s"$word ${binDawg.lookup(word)}")
+    }
 
   }
 
