@@ -20,12 +20,6 @@ class Node {
   }
 }
 
-class MyHashMap extends scala.collection.mutable.HashMap[Node, Node] {
-  protected override def elemEquals(node1: Node, node2: Node): Boolean = {
-    node1.toString() == node2.toString()
-  }
-}
-
 class Dawg {
   val root = new Node()
   var previousWord = ""
